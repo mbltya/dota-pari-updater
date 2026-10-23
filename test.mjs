@@ -18,6 +18,10 @@ test('отрицательный остаток суточной квоты жд
 test('после турнира остановка, чужому адресу секрет не отправляется',async()=>{
  assert.equal((await collect({at:STOP})).stopped,true);await assert.rejects(collect({token,site:'https://other.test',at}),/Неверный адрес/);
 });
+test('временная ошибка подключения повторяется, постоянная ошибка указывает узел без секрета',async()=>{
+ let calls=0;const result=await boundedJSON('https://example.test/api',{},async()=>{calls++;if(calls<2)throw Error('network');return Response.json({ok:true});},at);assert.equal(result.ok,true);assert.equal(calls,2);
+ await assert.rejects(boundedJSON('https://example.test/api',{method:'POST',headers:{Authorization:'Bearer hidden-secret'}},async()=>{throw Object.assign(Error('hidden-secret'),{cause:{code:'UND_ERR_CONNECT_TIMEOUT'}});},at),e=>e.message.includes('example.test POST')&&e.message.includes('UND_ERR_CONNECT_TIMEOUT')&&!e.message.includes('hidden-secret'));
+});
 test('одна недоступная карта не останавливает очередь; старые ники не отправляются обратно как пустые',async()=>{
  let payload;const fetcher=async(url,options={})=>{if(url===cloud){if(options.method==='POST'){payload=JSON.parse(options.body);return Response.json({ok:true});}return Response.json({snapshot:{leagueId:20395,maps:[]}});}if(url.includes('/leagues/'))return Response.json([raw(1),raw(2)]);if(url.endsWith('/1'))throw Error('timeout');return Response.json({...raw(2),chat:[{private:'not exported'}]});};
  await assert.rejects(collect({token,fetcher,at,now:()=>at,wait:async()=>{}}),/временно недоступна/);assert.equal(payload.details.length,1);assert.equal(payload.details[0].match_id,2);assert.equal(payload.details[0].chat,undefined);
